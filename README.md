@@ -95,56 +95,6 @@ If you prefer background mode:
 docker compose up --build -d
 ```
 
-## Deploy to Render (free-tier friendly)
-
-This system has 2 services, so on Render you deploy:
-
-- a **Producer** web service (runs `cmd/producer` on port `8080`)
-- a **Worker** web service (runs `cmd/worker` on port `8081`)
-
-You also need a hosted Redis (because Render services must connect to an external Redis). A common free-tier option is a managed Redis provider like Upstash.
-
-### 1) Push code to GitHub
-
-Make sure the repo is publicly accessible or your Render service has access.
-
-### 2) Create Producer service
-
-On Render: `New + Web Service` -> `From Docker`.
-
-- Dockerfile: `Dockerfile.producer`
-- Internal port: `8080`
-- Environment variables:
-  - `REDIS_URL` (required)
-  - `QUEUE_NAME` (optional, defaults to `workqueue:jobs`)
-
-### 3) Create Worker service
-
-On Render: `New + Web Service` -> `From Docker`.
-
-- Dockerfile: `Dockerfile.worker`
-- Internal port: `8081`
-- Environment variables:
-  - `REDIS_URL` (required)
-  - `QUEUE_NAME` (optional)
-  - `WORKER_CONCURRENCY` (optional)
-
-### 4) Test
-
-Enqueue:
-
-```bash
-curl -X POST https://<producer-render-url>/enqueue \
-  -H "Content-Type: application/json" \
-  -d "{\"type\":\"send_email\",\"retries\":3,\"payload\":{\"to\":\"user@example.com\",\"subject\":\"hello\"}}"
-```
-
-Then check:
-
-```bash
-curl https://<worker-render-url>/metrics
-```
-
 ## Endpoints
 
 ### Producer
@@ -217,27 +167,3 @@ Response (`200 OK`):
 
 - `200 OK` with body: `ok`
 
-### Quick PowerShell demo
-
-This repository includes `scripts/demo.ps1` which will:
-
-1. Start the stack with Docker compose
-2. Wait for `/health`
-3. Enqueue a sample `send_email` task
-4. Poll `/metrics` so you can show progress in a video
-
-Run it from the repo root:
-
-```powershell
-.\scripts\demo.ps1
-```
-
-## Built-in task types
-
-The worker currently supports:
-
-- `send_email`
-- `resize_image`
-- `generate_pdf`
-
-Add new task types in `internal/worker/worker.go` inside `ProcessTask`.
