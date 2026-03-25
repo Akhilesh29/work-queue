@@ -1,0 +1,35 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: workqueue-redis
+    ports:
+      - "6379:6379"
+
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: workqueue-producer
+    environment:
+      - REDIS_ADDR=redis:6379
+      - QUEUE_NAME=workqueue:jobs
+      - PRODUCER_PORT=8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: workqueue-worker
+    environment:
+      - REDIS_ADDR=redis:6379
+      - QUEUE_NAME=workqueue:jobs
+      - WORKER_PORT=8081
+      - WORKER_CONCURRENCY=3
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
