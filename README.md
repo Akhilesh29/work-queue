@@ -29,28 +29,7 @@ Notes:
 
 **High level overview**
 
-```mermaid
-flowchart TB
-  %% End-to-end pipeline
-  C["Client<br/>HTTP client"] -->|POST /enqueue| P["Producer<br/>Go HTTP :8080"]
-  P -->|RPUSH job JSON| Q["Redis<br/>Queue :6379"]
-  Q -->|BRPOP job| W["Worker<br/>Goroutines :8081"]
-
-  %% Task processing
-  W --> D{ProcessTask}
-  D -->|success| DONE["jobs_done<br/>metrics updated"]
-  D -->|failure - retry| REQ["Re-queued<br/>RPUSH back to Redis"] --> Q
-  D -->|failure - retries exhausted| FAIL["jobs_failed<br/>metrics updated"]
-
-  %% Task format (required fields)
-  TF["TASK FORMAT<br/>Required fields"]:::heading
-  TF --> T1["type<br/>which handler runs"]
-  TF --> T2["retries<br/>max retry attempts"]
-  TF --> T3["payload<br/>free-form key/value data"]
-  TF --> T4["attempts<br/>tracked internally by worker"]
-
-  classDef heading fill:#111827,color:#ffffff,stroke:#374151,stroke-width:1px;
-```
+![WorkQueue high level flow](assets/WorkQueue.png)
 
 ## Run locally
 
