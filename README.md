@@ -31,14 +31,14 @@ Notes:
 
 ```mermaid
 flowchart LR
-  A[Client / App] -->|POST /enqueue| P[Producer]
-  P -->|RPUSH job(JSON)| Q[(Redis Queue)]
-  Q -->|BRPOP job| W[Worker (concurrency)]
-  W --> E{ProcessTask(type)}
+  A[Client App] -->|POST /enqueue| P[Producer]
+  P -->|RPUSH job JSON| R[Redis Queue]
+  R -->|BRPOP job| W[Worker]
+  W --> X{ProcessTask}
 
-  E -->|success| M[metrics: jobs_done++]
-  E -->|failure & attempts <= retries| Q
-  E -->|failure & attempts > retries| F[metrics: jobs_failed++]
+  X -->|success| M[metrics jobs_done]
+  X -->|failure, attempts <= retries| R
+  X -->|failure, attempts > retries| F[metrics jobs_failed]
 ```
 
 ## Run locally
