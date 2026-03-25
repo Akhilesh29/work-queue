@@ -29,17 +29,7 @@ Notes:
 
 **High level overview**
 
-```mermaid
-flowchart LR
-  A[Client App] -->|POST /enqueue| P[Producer]
-  P -->|RPUSH job JSON| R[Redis Queue]
-  R -->|BRPOP job| W[Worker]
-  W --> X{ProcessTask}
-
-  X -->|success| M[metrics jobs_done]
-  X -->|failure, attempts <= retries| R
-  X -->|failure, attempts > retries| F[metrics jobs_failed]
-```
+![WorkQueue high level flow](assets/WorkQueue.png)
 
 ## Run locally
 
