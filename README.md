@@ -7,8 +7,8 @@ A distributed background task processing system written in Go, using Redis for j
 - **Producer**: accepts new tasks via HTTP `POST /enqueue`, lists recent jobs via `GET /api/jobs` when Postgres is configured, and enables **CORS** for the web UI when `ALLOWED_ORIGINS` is set.
 - **Worker**: consumes queued tasks and executes them concurrently; exposes `GET /metrics`.
 - **Redis**: primary job queue (`RPUSH` / `BRPOP`).
-- **Postgres** (optional but recommended for the UI): stores job rows (`pending` → `processing` → `completed` / `failed`) when `DATABASE_URL` is set on both producer and worker.
-- **Web UI** (`web/`): minimal Vite + React dashboard; deploy to **Vercel** and point it at your public producer and worker URLs.
+- **Postgres**: stores job rows (`pending` → `processing` → `completed` / `failed`) when `DATABASE_URL` is set on both producer and worker.
+- **Web UI** (`web/`): minimal Vite + React dashboard; deploy to **Vercel** and point it at public producer and worker URLs.
 
 ## Task format
 
