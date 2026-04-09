@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 	"workqueue/internal/producer"
 	"workqueue/internal/queue"
 	"workqueue/internal/store"
+	"workqueue/internal/worker"
 )
 
 func main() {
@@ -41,10 +45,45 @@ func main() {
 		log.Println("postgres: connected, jobs API enabled")
 	}
 
+	// Optional: run worker consumers inside the same service.
+	// This makes single-service deployments possible on platforms where creating
+	// multiple services is inconvenient. Set ENABLE_WORKER=false to disable.
+	enableWorker := os.Getenv("ENABLE_WORKER") != "false"
+	concurrency := 2
+	if c := os.Getenv("WORKER_CONCURRENCY"); c != "" {
+		if parsed, err := strconv.Atoi(c); err == nil && parsed > 0 {
+			concurrency = parsed
+		}
+	}
+	metrics := &worker.Metrics{}
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	var workerWG *sync.WaitGroup
+	if enableWorker {
+		log.Printf("worker: enabled (concurrency=%d)", concurrency)
+		workerWG = worker.StartConsumers(workerCtx, redisClient, queueName, concurrency, metrics, pgStore)
+	} else {
+		log.Printf("worker: disabled (ENABLE_WORKER=false)")
+	}
+
 	h := producer.Handler{Redis: redisClient, QueueName: queueName, Store: pgStore}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/enqueue", h.EnqueueTask)
 	mux.HandleFunc("/api/jobs", h.ListJobs)
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		qlen, err := redisClient.LLen(r.Context(), queueName).Result()
+		if err != nil {
+			http.Error(w, "failed to read queue length", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"total_jobs_in_queue": qlen,
+			"jobs_done":           metrics.JobsDone.Load(),
+			"jobs_failed":         metrics.JobsFailed.Load(),
+			"worker_concurrency":  concurrency,
+			"queue_name":          queueName,
+		})
+	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -74,6 +113,11 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
+
+	workerCancel()
+	if workerWG != nil {
+		workerWG.Wait()
+	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
