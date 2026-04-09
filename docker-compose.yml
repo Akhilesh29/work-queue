@@ -5,6 +5,18 @@ services:
     ports:
       - "6379:6379"
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: workqueue-postgres
+    environment:
+      POSTGRES_USER: workqueue
+      POSTGRES_PASSWORD: workqueue
+      POSTGRES_DB: workqueue
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
   producer:
     build:
       context: .
@@ -12,12 +24,15 @@ services:
     container_name: workqueue-producer
     environment:
       - REDIS_ADDR=redis:6379
+      - DATABASE_URL=postgres://workqueue:workqueue@postgres:5432/workqueue?sslmode=disable
       - QUEUE_NAME=workqueue:jobs
       - PRODUCER_PORT=8080
+      - ALLOWED_ORIGINS=*
     ports:
       - "8080:8080"
     depends_on:
       - redis
+      - postgres
 
   worker:
     build:
@@ -26,10 +41,16 @@ services:
     container_name: workqueue-worker
     environment:
       - REDIS_ADDR=redis:6379
+      - DATABASE_URL=postgres://workqueue:workqueue@postgres:5432/workqueue?sslmode=disable
       - QUEUE_NAME=workqueue:jobs
       - WORKER_PORT=8081
       - WORKER_CONCURRENCY=3
+      - ALLOWED_ORIGINS=*
     ports:
       - "8081:8081"
     depends_on:
       - redis
+      - postgres
+
+volumes:
+  pgdata:

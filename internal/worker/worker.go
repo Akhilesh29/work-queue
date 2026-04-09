@@ -19,19 +19,19 @@ type Metrics struct {
 	JobsFailed atomic.Int64
 }
 
-func StartConsumers(ctx context.Context, redisClient *redis.Client, queueName string, concurrency int, metrics *Metrics) *sync.WaitGroup {
+func StartConsumers(ctx context.Context, redisClient *redis.Client, queueName string, concurrency int, metrics *Metrics, jobStore JobStore) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			runConsumer(ctx, redisClient, queueName, workerID, metrics)
+			runConsumer(ctx, redisClient, queueName, workerID, metrics, jobStore)
 		}(i + 1)
 	}
 	return &wg
 }
 
-func runConsumer(ctx context.Context, redisClient *redis.Client, queueName string, workerID int, metrics *Metrics) {
+func runConsumer(ctx context.Context, redisClient *redis.Client, queueName string, workerID int, metrics *Metrics, jobStore JobStore) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -63,10 +63,21 @@ func runConsumer(ctx context.Context, redisClient *redis.Client, queueName strin
 			continue
 		}
 
+		if t.JobID != "" && jobStore != nil {
+			if err := jobStore.MarkProcessing(ctx, t.JobID); err != nil {
+				log.Printf("[worker-%d] mark processing %s: %v", workerID, t.JobID, err)
+			}
+		}
+
 		if err := ProcessTask(t); err != nil {
 			t.Attempts++
 			if t.Attempts <= t.Retries {
 				log.Printf("[worker-%d] retrying task type=%s attempt=%d/%d", workerID, t.Type, t.Attempts, t.Retries)
+				if t.JobID != "" && jobStore != nil {
+					if err := jobStore.SetJobPendingRetry(ctx, t.JobID, t.Attempts, err.Error()); err != nil {
+						log.Printf("[worker-%d] db retry update %s: %v", workerID, t.JobID, err)
+					}
+				}
 				if enqueueErr := queue.Enqueue(ctx, redisClient, queueName, t); enqueueErr != nil {
 					log.Printf("[worker-%d] failed requeue task: %v", workerID, enqueueErr)
 					metrics.JobsFailed.Add(1)
@@ -74,10 +85,20 @@ func runConsumer(ctx context.Context, redisClient *redis.Client, queueName strin
 				continue
 			}
 			log.Printf("[worker-%d] task failed after retries type=%s err=%v", workerID, t.Type, err)
+			if t.JobID != "" && jobStore != nil {
+				if err := jobStore.FailJob(ctx, t.JobID, t.Attempts, err.Error()); err != nil {
+					log.Printf("[worker-%d] db fail %s: %v", workerID, t.JobID, err)
+				}
+			}
 			metrics.JobsFailed.Add(1)
 			continue
 		}
 
+		if t.JobID != "" && jobStore != nil {
+			if err := jobStore.CompleteJob(ctx, t.JobID, t.Attempts); err != nil {
+				log.Printf("[worker-%d] db complete %s: %v", workerID, t.JobID, err)
+			}
+		}
 		metrics.JobsDone.Add(1)
 		log.Printf("[worker-%d] task completed type=%s", workerID, t.Type)
 	}
@@ -106,4 +127,3 @@ func ProcessTask(taskToExecute task.Task) error {
 		return fmt.Errorf("unsupported task type: %s", taskToExecute.Type)
 	}
 }
-

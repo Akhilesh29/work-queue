@@ -11,7 +11,9 @@ import (
 	"syscall"
 	"time"
 
+	"workqueue/internal/middleware"
 	"workqueue/internal/queue"
+	"workqueue/internal/store"
 	"workqueue/internal/worker"
 )
 
@@ -37,9 +39,20 @@ func main() {
 		}
 	}
 
+	var jobStore worker.JobStore
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		s, err := store.NewPostgres(context.Background(), dsn)
+		if err != nil {
+			log.Fatalf("postgres: %v", err)
+		}
+		defer s.Close()
+		jobStore = s
+		log.Println("postgres: connected for job status updates")
+	}
+
 	metrics := &worker.Metrics{}
 	workerCtx, workerCancel := context.WithCancel(context.Background())
-	wg := worker.StartConsumers(workerCtx, redisClient, queueName, concurrency, metrics)
+	wg := worker.StartConsumers(workerCtx, redisClient, queueName, concurrency, metrics, jobStore)
 
 	port := os.Getenv("WORKER_PORT")
 	if port == "" {
@@ -72,7 +85,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           mux,
+		Handler:           middleware.CORSMiddleware(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -96,4 +109,3 @@ func main() {
 		log.Printf("worker shutdown error: %v", err)
 	}
 }
-

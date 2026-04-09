@@ -9,8 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"workqueue/internal/middleware"
 	"workqueue/internal/producer"
 	"workqueue/internal/queue"
+	"workqueue/internal/store"
 )
 
 func main() {
@@ -28,9 +30,21 @@ func main() {
 		queueName = queue.DefaultQueueName
 	}
 
-	h := producer.Handler{Redis: redisClient, QueueName: queueName}
+	var pgStore *store.Postgres
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		s, err := store.NewPostgres(context.Background(), dsn)
+		if err != nil {
+			log.Fatalf("postgres: %v", err)
+		}
+		defer s.Close()
+		pgStore = s
+		log.Println("postgres: connected, jobs API enabled")
+	}
+
+	h := producer.Handler{Redis: redisClient, QueueName: queueName, Store: pgStore}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/enqueue", h.EnqueueTask)
+	mux.HandleFunc("/api/jobs", h.ListJobs)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -46,7 +60,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           mux,
+		Handler:           middleware.CORSMiddleware(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -67,4 +81,3 @@ func main() {
 		log.Printf("producer shutdown error: %v", err)
 	}
 }
-
