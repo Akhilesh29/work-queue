@@ -196,17 +196,46 @@ Response (`200 OK`):
 
 ## Deploy Railway and Vercel
 
-I cannot push to your Railway or Vercel accounts from this environment; use the steps below after you connect your GitHub repo.
+### What an agent can and cannot do
 
-### Railway (backend)
+Even if your Railway account uses **akhileshmeena577@gmail.com** and GitHub is connected, **no assistant can log in as you**. Deployments from this environment only work through **your** Railway/Vercel CLI session or **your** browser. If the CLI can read `whoami` but **`railway add` / `railway deploy` say `Unauthorized`**, refresh credentials (see below), then continue.
 
-1. Create a new **Postgre** database on Railway and note **`DATABASE_URL`**.
-2. Add **Redis** (Railway Redis plugin or any `REDIS_URL`-compatible provider).
-3. Create **two** services from this repo, both using **Dockerfile** deploy:
-   - **Producer**: Dockerfile path `Dockerfile.producer`. Set variables: `REDIS_URL`, `DATABASE_URL`, `ALLOWED_ORIGINS` (your Vercel origin, e.g. `https://your-app.vercel.app`), and optionally `QUEUE_NAME`.
-   - **Worker**: Dockerfile path `Dockerfile.worker`. Set the same `REDIS_URL`, `DATABASE_URL`, `ALLOWED_ORIGINS`, `QUEUE_NAME`, and `WORKER_CONCURRENCY`.
-4. Railway injects **`PORT`** per service—no need to set `PRODUCER_PORT` / `WORKER_PORT` manually.
-5. Copy the public **HTTPS URLs** for both services (producer and worker).
+### Railway CLI: fix `Unauthorized`
+
+1. In an **interactive** terminal (not sandboxed), run: `railway login`
+2. Or create a token at [Railway account tokens](https://railway.com/account/tokens), then in PowerShell:
+   ```powershell
+   $env:RAILWAY_TOKEN="paste_token_here"
+   railway add -d postgres
+   railway add -d redis
+   ```
+
+### Railway (backend) — recommended layout
+
+Repo includes **config-as-code** files so each service picks the correct Dockerfile:
+
+| Service   | In Railway → Service → Settings → **Config as code** → file path |
+| --------- | ------------------------------------------------------------------- |
+| Producer  | `/deploy/railway-producer.toml`                                     |
+| Worker    | `/deploy/railway-worker.toml`                                       |
+
+1. Add **Postgres** and **Redis** to the same Railway project (plugins or `railway add`).
+2. Create **two** services from **this GitHub repo** (same repo, two services).
+3. Set each service’s **config file** as in the table above (paths start at repo root).
+4. **Variables** (use Railway **Variable References** so producer/worker share the same DB and queue):
+   - `REDIS_URL` — reference your Redis plugin’s URL (or raw `REDIS_URL`).
+   - `DATABASE_URL` — reference Postgres `DATABASE_URL`.
+   - `QUEUE_NAME` — optional; default `workqueue:jobs`.
+   - `ALLOWED_ORIGINS` — your Vercel origin, e.g. `https://your-app.vercel.app` (or `*` only for quick tests).
+   - `WORKER_CONCURRENCY` — optional on the **worker** (e.g. `3`).
+5. Railway sets **`PORT`** automatically — do not hardcode `8080` / `8081`.
+6. Generate public URLs for **both** services (**producer** and **worker**) in the **Networking** tab.
+
+**Optional:** Railway can also import **`docker-compose.yml`** from the project canvas (drag-and-drop). Not every Compose feature maps 1:1; if something fails, use the two-service layout above.
+
+### GitHub → Railway auto-deploy
+
+In each service’s settings, connect **this repository** and the branch you use (`main`). Pushes will rebuild using the linked `deploy/railway-*.toml`.
 
 ### Vercel (frontend)
 
