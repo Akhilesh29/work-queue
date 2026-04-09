@@ -191,7 +191,6 @@ Response (`200 OK`):
 ### `/health`
 
 - `200 OK` with body: `ok`
-
 ---
 
 
