@@ -1,0 +1,17 @@
+# Go
+*.exe
+*.test
+
+# Node / frontend
+web/node_modules/
+web/dist/
+web/.env
+web/.env.local
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,9 @@
+# Use this as the service "Config as code" path in Railway: /deploy/railway-worker.toml
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.worker"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
