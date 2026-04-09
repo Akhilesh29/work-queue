@@ -91,7 +91,13 @@ export default function App() {
         setErr(text || res.statusText);
         return;
       }
-      setMsg(text);
+      try {
+        const parsed = JSON.parse(text) as { job_id?: string; status?: string; type?: string };
+        const id = parsed.job_id ? ` (job_id: ${parsed.job_id})` : "";
+        setMsg(`Queued${id}`);
+      } catch {
+        setMsg("Queued");
+      }
       await loadJobs();
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : String(ex));
@@ -104,14 +110,7 @@ export default function App() {
     <div className="container">
       <header>
         <h1>WorkQueue</h1>
-        <p>
-          Enqueue jobs to the API; workers drain Redis and persist status in Postgres when{" "}
-          <code>DATABASE_URL</code> is set.
-        </p>
-        <p className="thin">
-          API: {API_BASE || "same origin (dev proxy)"} · Worker metrics:{" "}
-          {WORKER_BASE || "configure VITE_WORKER_URL for production"}
-        </p>
+        <p className="thin">Queue jobs and monitor execution in real-time.</p>
       </header>
 
       <div className="grid">
@@ -146,10 +145,6 @@ export default function App() {
           </form>
           {err ? <div className="err">{err}</div> : null}
           {msg ? <div className="ok">{msg}</div> : null}
-          <p className="muted">
-            Without <code>DATABASE_URL</code> on the API, jobs still queue in Redis but the list below may be
-            empty.
-          </p>
         </div>
 
         <div className="card">
@@ -182,7 +177,7 @@ export default function App() {
       <div className="card" style={{ marginTop: "1.25rem" }}>
         <h2>Recent jobs (Postgres)</h2>
         {jobs.length === 0 ? (
-          <p className="muted">No rows yet, or database not configured on the API.</p>
+          <p className="muted">No jobs yet.</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table>
